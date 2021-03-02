@@ -10,6 +10,7 @@ import android.view.SurfaceView;
 
 public class OpenglPlayerActivity extends AppCompatActivity implements SurfaceHolder.Callback {
     private SurfaceHolder mSurfaceHolder;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -21,14 +22,18 @@ public class OpenglPlayerActivity extends AppCompatActivity implements SurfaceHo
 
     @Override
     public void surfaceCreated(@NonNull SurfaceHolder surfaceHolder) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String dir = Environment.getExternalStorageDirectory().getPath();
-                String url = dir + "/testfile.mp4";
-                NativePlayer.openGlPlayVideo(url, mSurfaceHolder.getSurface());
-            }
-        }).start();
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                String dir = Environment.getExternalStorageDirectory().getPath();
+//                String url = dir + "/testfile.mp4";
+//                NativePlayer.openGlPlayVideo(url, mSurfaceHolder.getSurface());
+//            }
+//        }).start();
+
+        String dir = Environment.getExternalStorageDirectory().getPath();
+        String url = dir + "/testfile.mp4";
+        NativePlayer.openGlPlayVideo(url, mSurfaceHolder.getSurface());
     }
 
     @Override

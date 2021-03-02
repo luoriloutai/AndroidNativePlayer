@@ -102,7 +102,7 @@ Java_com_bug_nativeplayer_NativePlayer_playVideo(JNIEnv *env, jclass clazz, jstr
                                                 pCodecCtx->width,
                                                 pCodecCtx->height,
                                                 AV_PIX_FMT_RGBA,
-                                                SWS_BILINEAR,
+                                                SWS_FAST_BILINEAR,
                                                 NULL,
                                                 NULL,
                                                 NULL);
@@ -137,7 +137,7 @@ Java_com_bug_nativeplayer_NativePlayer_playVideo(JNIEnv *env, jclass clazz, jstr
                 ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
 
                 // ffmpeg解码完是YUV格式，需要转换成RGBA
-                sws_scale(sws_ctx, (uint8_t const *const *) pFrame->data,
+                sws_scale(sws_ctx, pFrame->data,
                           pFrame->linesize, 0, pCodecCtx->height,
                           pFrameRGBA->data, pFrameRGBA->linesize);
 

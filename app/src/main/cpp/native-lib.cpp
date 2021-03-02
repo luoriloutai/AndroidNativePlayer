@@ -39,7 +39,7 @@ Java_com_bug_nativeplayer_NativePlayer_nativeWindowPlayVideo(JNIEnv *env, jclass
         return -1;
     }
 
-    // Find the first video stream
+
     int videoStream = -1, i;
     for (i = 0; i < pFormatCtx->nb_streams; i++) {
         if (pFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
@@ -91,7 +91,7 @@ Java_com_bug_nativeplayer_NativePlayer_nativeWindowPlayVideo(JNIEnv *env, jclass
         return -1;
     }
 
-    // buffer中数据就是用于渲染的,且格式为RGBA
+
     int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, pCodecCtx->width, pCodecCtx->height, 1);
     //uint8_t *buffer = (uint8_t *) av_malloc(numBytes * sizeof(uint8_t));
     auto *buffer = (uint8_t *) av_malloc(numBytes);  // malloc() 也行
@@ -149,6 +149,7 @@ Java_com_bug_nativeplayer_NativePlayer_nativeWindowPlayVideo(JNIEnv *env, jclass
                           pFrame->linesize, 0, pCodecCtx->height,
                           pFrameRGBA->data, pFrameRGBA->linesize);
 
+
 //                // 做试验，创建新空间存储转换后的帧数据
 //                // 结果可行
 //                uint8_t * tmp = (uint8_t*)malloc(numBytes);
@@ -205,16 +206,17 @@ Java_com_bug_nativeplayer_NativePlayer_nativeWindowPlayVideo(JNIEnv *env, jclass
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz, jstring url, jobject surface) {
-    /* ======
-     * EGL
-     * ======*/
+
+    /* ========
+     * EGL 相关
+     * ========*/
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY) {
-        LOGE("create display failed:%d",eglGetError());
+        LOGE("create display failed:%d", eglGetError());
         return -1;
     }
     if (!eglInitialize(display, nullptr, nullptr)) {
-        LOGE("initialize display failed:%d",eglGetError());
+        LOGE("initialize display failed:%d", eglGetError());
         return -1;
     }
     const EGLint configAttribs[] = {EGL_RED_SIZE, 8,
@@ -235,7 +237,7 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
     // 第三个参数可以不传，这时numConfigs的值就是找到的符合条件的eglconfig的个数，
     // 然后，再将numConfigs传到第四个参数，同时传一个接收eglconfig的数组到第三个参数，可以获取所有符合条件的eglconfig
     if (!eglChooseConfig(display, configAttribs, &config, 1, &numConfigs)) {
-        LOGE("eglChooseConfig() error:%d",eglGetError());
+        LOGE("eglChooseConfig() error:%d", eglGetError());
         return -1;
     }
     EGLint contextAttribs[] = {
@@ -244,11 +246,10 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
     EGLContext context;
     if (!(context = eglCreateContext(display, config, EGL_NO_CONTEXT,
                                      contextAttribs))) {
-        LOGE("eglCreateContext() error:%d",eglGetError());
+        LOGE("eglCreateContext() error:%d", eglGetError());
         return -1;
     }
 
-    // 获取native window
     ANativeWindow *nativeWindow = ANativeWindow_fromSurface(env, surface);
     EGLint format;
     if (!eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format)) {
@@ -260,13 +261,131 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
     if (!(windowSurface = eglCreateWindowSurface(display, config, nativeWindow, nullptr))) {
         LOGE("eglCreateWindowSurface() returned error %d", eglGetError());
     }
+
+    // 绑定到当前线程，opengl才可以操作设备
     if (!eglMakeCurrent(display, windowSurface, windowSurface, context)) {
         LOGE("eglMakeCurrent() error:%d\n", eglGetError());
         return -1;
     }
 
+    /* ===============
+     * OpenGL ES 相关
+     * ===============*/
+
+    // 顶点坐标，以物体中心为原点
+    GLfloat vertices[] = {-1.0f, -1.0f,
+                          1.0f, -1.0f,
+                          -1.0f, 1.0f,
+                          1.0f, 1.0f};
+
+    // 纹理与屏幕坐标都以顶点坐标为基准进行转换
+    // 把相对应的顶点坐标转换成纹理或屏幕坐标
+    // 就产生下面两个坐标
+
+    // 纹理坐标，以物体左下角为原点，将顶点转成如下坐标
+    // 不直接在屏幕上绘制时使用，例如离屏渲染
+    GLfloat texCoords[] = {0.0f, 0.0f,
+                           1.0f, 0.0f,
+                           0.0f, 1.0f,
+                           1.0f, 1.0f};
+
+    // 屏幕坐标，以屏幕或物体左上角为原点，将顶点转为如下坐标
+    GLfloat screenCoords[] = {0.0f, 1.0f,
+                              1.0f, 1.0f,
+                              0.0f, 0.0f,
+                              1.0f, 0.0f};
+
+    const GLchar *vertexShaderSource = "attribute vec4 position; \n"
+                                       "attribute vec2 texcoord; \n"
+                                       "varying vec2 v_texcoord; \n"
+                                       "void main(void) \n"
+                                       "{ \n"
+                                       " gl_Position =  position; \n"
+                                       " v_texcoord = texcoord; \n"
+                                       "} \n";
+    const GLchar *fragmentShaderSource = "precision highp float; \n"
+                                         "varying highp vec2 v_texcoord; \n"
+                                         "uniform sampler2D texSampler; \n"
+                                         "void main() { \n"
+                                         " gl_FragColor = texture2D(texSampler, v_texcoord); \n"
+                                         "} \n";
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+    glCompileShader(vertexShader);
+    GLint compiled;
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compiled);
+    if (compiled == 0) {
+        glDeleteShader(vertexShader);
+        LOGE("vertex shader compile failed");
+        return -1;
+    }
+
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+    glCompileShader(fragmentShader);
+    compiled = 0;
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &compiled);
+    if (compiled == 0) {
+        glDeleteShader(fragmentShader);
+        LOGE("fragment shader compile failed.");
+        return -1;
+    }
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    int error;
+    if ((error = glGetError()) != GL_NO_ERROR) {
+        LOGE("attach vertex shader error:%d", error);
+        return -1;
+    }
+    error = GL_NO_ERROR;
+    glAttachShader(program, fragmentShader);
+    if ((error = glGetError()) != GL_NO_ERROR) {
+        LOGE("attach fragment shader error:%d", error);
+        return -1;
+    }
+    glLinkProgram(program);
+    GLint linkStatus = 0;
+    glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
+    if (linkStatus != GL_TRUE) {
+        GLint len = 0;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
+        GLchar logInfo[len];
+        glGetProgramInfoLog(program, len, nullptr, logInfo);
+        LOGE("Could not link program: %s", logInfo);
+
+        glDeleteProgram(program);
+        program = 0;
+        LOGE("link program falied");
+        return -1;
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    glUseProgram(program);
+    GLuint positionLoc = glGetAttribLocation(program, "position");
+    GLuint texcoordLoc = glGetAttribLocation(program, "texcoord");
+    GLuint texSamplerLoc = glGetUniformLocation(program, "texSampler");
+
+    glVertexAttribPointer(positionLoc, 2, GL_FLOAT, GL_FALSE, 0, vertices);
+    glEnableVertexAttribArray(positionLoc);
+    glVertexAttribPointer(texcoordLoc, 2, GL_FLOAT, GL_FALSE, 0, screenCoords);
+    glEnableVertexAttribArray(texcoordLoc);
+
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glActiveTexture(GL_TEXTURE0); // 纹理单元 texture0 默认是激活的,这句代码可以不要
+    glBindTexture(GL_TEXTURE_2D, texture); // 绑定之前需要先激活纹理单元
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // 缩小参数设置
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); // 放大参数设置
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // 纹理S方向的参数，拉伸、重复等
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // 纹理T方向的参数
+    glUniform1i(texSamplerLoc,0); // 指明采样器连接到哪个纹理单元，从该纹理单元采样
 
 
+    /*================
+     * ffmpeg 解码相关
+     *================ */
     const char *file_name = env->GetStringUTFChars(url, nullptr);
     AVFormatContext *pFormatCtx = avformat_alloc_context();
 
@@ -281,7 +400,6 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
         return -1;
     }
 
-    // Find the first video stream
     int videoStream = -1, i;
     for (i = 0; i < pFormatCtx->nb_streams; i++) {
         if (pFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
@@ -311,8 +429,6 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
         LOGE("Could not open codec.");
         return -1;
     }
-
-
 
     // 分配一个用于解码的帧
     AVFrame *pFrame = av_frame_alloc();
@@ -344,7 +460,6 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
                                                 nullptr,
                                                 nullptr);
 
-
     AVPacket packet;
 
     while (av_read_frame(pFormatCtx, &packet) >= 0) {
@@ -371,13 +486,30 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
             // 解码完一帧。如果返回值不为0且不为AVERROR_EOF则需进行下一次读取
             // 也就是说一帧并不一定一次就能解完，一个包内可能含有多个帧
             if (receiveRet == 0) {
-                // ffmpeg解码完是YUV格式，需要转换成RGBA
+
                 sws_scale(sws_ctx, pFrame->data,
                           pFrame->linesize, 0, pCodecCtx->height,
                           pFrameRGBA->data, pFrameRGBA->linesize);
 
+                // 转换后的 pFrameRGBA 的 width 与 height 值都为0
+                // 所以想要使用宽和高不能用转换后的缓存帧的宽高属性
+                // 可以使用原帧的宽高
 
 
+//                int bufSize = av_image_get_buffer_size(AV_PIX_FMT_RGBA,pFrame->width,pFrame->height,1);
+//                uint8_t * data = (uint8_t *)malloc(bufSize);
+//                memcpy(data,pFrameRGBA->data[0],bufSize);
+//                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pFrame->width, pFrame->height, 0, GL_RGBA,
+//                             GL_UNSIGNED_BYTE, data);glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pFrame->width, pFrame->height, 0, GL_RGBA,
+//                                                                  GL_UNSIGNED_BYTE, data);
+
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pFrame->width, pFrame->height, 0, GL_RGBA,
+                                                                  GL_UNSIGNED_BYTE, pFrameRGBA->data[0]);
+
+                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+                eglSwapBuffers(display,windowSurface);
+
+                //free(data);
             }
 
         }
@@ -386,6 +518,11 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
         av_packet_unref(&packet);
     }
 
+    /* =========
+     * 释放资源
+     * =========*/
+
+    // free ffmpeg
 
     av_free(buffer);
     av_free(pFrameRGBA);
@@ -394,9 +531,14 @@ Java_com_bug_nativeplayer_NativePlayer_openGlPlayVideo(JNIEnv *env, jclass clazz
     avcodec_close(pCodecCtx);
     avformat_close_input(&pFormatCtx);
 
+    // free gles
+    glBindTexture(GL_TEXTURE_2D,0);
+    glDisableVertexAttribArray(positionLoc);
+    glDisableVertexAttribArray(texcoordLoc);
+
     // destroy egl
-    eglDestroySurface(display,windowSurface);
-    eglDestroyContext(display,context);
+    eglDestroySurface(display, windowSurface);
+    eglDestroyContext(display, context);
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     display = EGL_NO_DISPLAY;
     context = EGL_NO_CONTEXT;

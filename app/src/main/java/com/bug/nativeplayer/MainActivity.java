@@ -23,6 +23,8 @@ public class MainActivity extends AppCompatActivity {
 
     /*
     *  说明：先在SDCard根目录下放一个名为“testfile.mp4”的文件
+    *       项目目录file下提供了一个testfile.mp4,可以直接把它
+    *       放在SDCard根目录
     * */
 
     private static final String TAG = "my_out_main_activity";

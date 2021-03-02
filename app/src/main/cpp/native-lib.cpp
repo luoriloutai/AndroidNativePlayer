@@ -90,7 +90,7 @@ Java_com_bug_nativeplayer_NativePlayer_playVideo(JNIEnv *env, jclass clazz, jstr
     // buffer中数据就是用于渲染的,且格式为RGBA
     int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, pCodecCtx->width, pCodecCtx->height, 1);
     //uint8_t *buffer = (uint8_t *) av_malloc(numBytes * sizeof(uint8_t));
-    auto *buffer = (uint8_t *) av_malloc(numBytes);
+    auto *buffer = (uint8_t *) av_malloc(numBytes);  // malloc() 也行
     // 用buffer初始化渲染帧空间
     av_image_fill_arrays(pFrameRGBA->data, pFrameRGBA->linesize, buffer, AV_PIX_FMT_RGBA,
                          pCodecCtx->width, pCodecCtx->height, 1);

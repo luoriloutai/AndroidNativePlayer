@@ -1,8 +1,8 @@
 package com.bug.nativeplayer;
 
-/**
- * Created by hejunlin on 17/3/1.
- */
+
+import android.view.Surface;
+
 
 public class NativePlayer {
 
@@ -10,5 +10,7 @@ public class NativePlayer {
         System.loadLibrary("native-lib");
     }
 
-    public static native int playVideo(String url, Object surface);
+    public static native int nativeWindowPlayVideo(String url, Surface surface);
+
+    public static native int openGlPlayVideo(String url, Surface surface);
 }

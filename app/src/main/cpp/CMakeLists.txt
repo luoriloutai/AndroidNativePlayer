@@ -118,6 +118,8 @@ target_link_libraries( # Specifies the target library.
                        native-lib
         android
         OpenSLES
+        EGL
+        GLESv2
         avutil
         swresample
         avcodec
